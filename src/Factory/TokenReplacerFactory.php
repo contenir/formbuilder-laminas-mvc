@@ -7,6 +7,7 @@ namespace Contenir\FormBuilder\Laminas\Mvc\Factory;
 use Contenir\FormBuilder\Service\TokenReplacer;
 use Psr\Container\ContainerInterface;
 
+use function array_key_exists;
 use function is_array;
 use function is_callable;
 use function is_string;
@@ -37,6 +38,7 @@ class TokenReplacerFactory
     {
         $config      = $container->get('config')['formbuilder'] ?? [];
         $siteContext = is_array($config['site_context'] ?? null) ? $config['site_context'] : [];
+        $siteContext = $this->autoPopulateSiteContext($siteContext);
 
         $tokens = new TokenReplacer($siteContext);
 
@@ -55,5 +57,34 @@ class TokenReplacerFactory
         }
 
         return $tokens;
+    }
+
+    /**
+     * Fill in `base_url` from `$_SERVER` when running in an HTTP context
+     * and the consumer hasn't already pinned it via config. CLI contexts
+     * (cron, queue workers) skip the auto-populate and rely on whatever
+     * static value `formbuilder.site_context.base_url` carries — or fall
+     * through to "preserve token" if neither is set.
+     *
+     * @param array<string, mixed> $siteContext
+     * @return array<string, mixed>
+     */
+    private function autoPopulateSiteContext(array $siteContext): array
+    {
+        if (array_key_exists('base_url', $siteContext)) {
+            return $siteContext;
+        }
+
+        $host = is_string($_SERVER['HTTP_HOST'] ?? null) ? $_SERVER['HTTP_HOST'] : '';
+        if ($host === '') {
+            return $siteContext;
+        }
+
+        $https  = $_SERVER['HTTPS'] ?? '';
+        $secure = is_string($https) && $https !== '' && $https !== 'off';
+        $scheme = $secure ? 'https' : 'http';
+
+        $siteContext['base_url'] = $scheme . '://' . $host;
+        return $siteContext;
     }
 }
