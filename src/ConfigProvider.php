@@ -6,6 +6,8 @@ namespace Contenir\FormBuilder\Laminas\Mvc;
 
 use Contenir\FormBuilder\Laminas\Mvc\Controller\SubmitController;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\EmailNotificationRegistrarFactory;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\FormStashedStateFactory;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\FormStateStashFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\LaminasDbEntryRepositoryFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\LaminasDbFormLoaderFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\StoreSubmissionRegistrarFactory;
@@ -15,7 +17,9 @@ use Contenir\FormBuilder\Laminas\Mvc\Loader\LaminasDbFormLoader;
 use Contenir\FormBuilder\Laminas\Mvc\Registrar\EmailNotificationRegistrar;
 use Contenir\FormBuilder\Laminas\Mvc\Registrar\StoreSubmissionRegistrar;
 use Contenir\FormBuilder\Laminas\Mvc\Repository\LaminasDbEntryRepository;
+use Contenir\FormBuilder\Laminas\Mvc\State\FormStateStash;
 use Contenir\FormBuilder\Laminas\Mvc\View\Helper\FormMarkup;
+use Contenir\FormBuilder\Laminas\Mvc\View\Helper\FormStashedState;
 use Contenir\FormBuilder\Registrar\WebhookRegistrar;
 
 /**
@@ -48,6 +52,7 @@ final class ConfigProvider
                 StoreSubmissionRegistrar::class     => StoreSubmissionRegistrarFactory::class,
                 EmailNotificationRegistrar::class   => EmailNotificationRegistrarFactory::class,
                 WebhookRegistrar::class             => WebhookRegistrarFactory::class,
+                FormStateStash::class               => FormStateStashFactory::class,
             ],
         ];
     }
@@ -65,20 +70,26 @@ final class ConfigProvider
     /**
      * @return array<string, mixed>
      *
-     * Just `formMarkup` — a pure renderer that takes a FormDefinition
-     * and a built Laminas\Form. By design no view helper does its own
+     * `formMarkup` is a pure renderer that takes a FormDefinition and
+     * a built Laminas\Form. By design no view helper does its own
      * data fetching: the controller owns loading the definition (via
      * {@see LaminasDbFormLoader}) and building the form (via
      * {@see \Contenir\FormBuilder\Service\FormBuilderService}), and
-     * passes both to the template. Confirmation rendering is the
-     * controller's call too — branch on `?form=ok` and choose what
-     * the template emits.
+     * passes both to the template.
+     *
+     * `formStashedState` is the read-half of the {@see FormStateStash}
+     * round trip. Section partials call it with the form slug to pull
+     * the previous submission's values and validator messages so the
+     * rebuilt form can be hydrated after a redirect-on-error reload.
      */
     public function getViewHelpers(): array
     {
         return [
             'invokables' => [
                 'formMarkup' => FormMarkup::class,
+            ],
+            'factories' => [
+                'formStashedState' => FormStashedStateFactory::class,
             ],
         ];
     }
