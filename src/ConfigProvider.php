@@ -12,6 +12,7 @@ use Contenir\FormBuilder\Laminas\Mvc\Factory\LaminasDbEntryRepositoryFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\LaminasDbFormLoaderFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\StoreSubmissionRegistrarFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\SubmitControllerFactory;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\TokenReplacerFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\WebhookRegistrarFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Loader\LaminasDbFormLoader;
 use Contenir\FormBuilder\Laminas\Mvc\Registrar\EmailNotificationRegistrar;
@@ -21,6 +22,7 @@ use Contenir\FormBuilder\Laminas\Mvc\State\FormStateStash;
 use Contenir\FormBuilder\Laminas\Mvc\View\Helper\FormMarkup;
 use Contenir\FormBuilder\Laminas\Mvc\View\Helper\FormStashedState;
 use Contenir\FormBuilder\Registrar\WebhookRegistrar;
+use Contenir\FormBuilder\Service\TokenReplacer;
 
 /**
  * Returns the merged Laminas-MVC config consumed by Module::getConfig().
@@ -53,6 +55,7 @@ final class ConfigProvider
                 EmailNotificationRegistrar::class   => EmailNotificationRegistrarFactory::class,
                 WebhookRegistrar::class             => WebhookRegistrarFactory::class,
                 FormStateStash::class               => FormStateStashFactory::class,
+                TokenReplacer::class                => TokenReplacerFactory::class,
             ],
         ];
     }
@@ -128,6 +131,14 @@ final class ConfigProvider
             'db_adapter' => 'Laminas\Db\Adapter\Adapter',
             // Static values for {site:*} TokenReplacer expansion.
             'site_context' => [],
+            // Map of additional TokenReplacer namespaces => service-manager
+            // ids. Each service must resolve to a callable of shape
+            // `function (string $key): string`. Wired by
+            // {@see Factory\TokenReplacerFactory}; lets consumers add
+            // namespaces like `{settings:foo.bar}` without touching the
+            // package. The same TokenReplacer instance is shared between
+            // EmailNotificationRegistrar and SubmitController.
+            'token_resolvers' => [],
             // Factory list of additional submission observers. Each entry
             // can be a service-manager id (string) — resolved at submit
             // time and attached to FormSubmissionService alongside the

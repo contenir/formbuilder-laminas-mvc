@@ -11,6 +11,9 @@ use Contenir\FormBuilder\Service\BuilderForm;
 use Contenir\FormBuilder\Service\TokenReplacer;
 use Laminas\Mail\Message;
 use Laminas\Mail\Transport\TransportInterface;
+use Laminas\Mime\Message as MimeMessage;
+use Laminas\Mime\Mime;
+use Laminas\Mime\Part as MimePart;
 use Psr\Log\LoggerInterface;
 use SplObserver;
 use SplSubject;
@@ -20,11 +23,17 @@ use function array_filter;
 use function array_map;
 use function array_values;
 use function filter_var;
+use function html_entity_decode;
 use function is_array;
+use function preg_match;
+use function preg_replace;
 use function preg_split;
 use function sprintf;
+use function strip_tags;
 use function trim;
+use function wordwrap;
 
+use const ENT_QUOTES;
 use const FILTER_VALIDATE_EMAIL;
 
 /**
@@ -90,14 +99,24 @@ class EmailNotificationRegistrar implements SplObserver
             $message = new Message();
             $message->setEncoding('UTF-8');
             $message->setSubject($this->tokens->replace($notification->subject, $form, $values, $entry));
-            $message->setBody($this->tokens->replace($notification->bodyTemplate ?? '', $form, $values, $entry));
 
-            if ($notification->fromAddress !== null && $notification->fromAddress !== '') {
-                $message->setFrom($notification->fromAddress);
-            }
-            if ($notification->replyTo !== null && $notification->replyTo !== '') {
-                $message->setReplyTo($notification->replyTo);
-            }
+            $resolvedBody = $this->tokens->replace($notification->bodyTemplate ?? '', $form, $values, $entry);
+            $this->applyBody($message, $resolvedBody);
+
+            $this->applyAddress(
+                $notification->fromAddress,
+                $form,
+                $values,
+                $entry,
+                static fn (string $address): Message => $message->setFrom($address),
+            );
+            $this->applyAddress(
+                $notification->replyTo,
+                $form,
+                $values,
+                $entry,
+                static fn (string $address): Message => $message->setReplyTo($address),
+            );
 
             foreach ($this->splitAddresses($notification->toAddress) as $recipient) {
                 $resolved = $this->tokens->replace($recipient, $form, $values, $entry);
@@ -114,6 +133,101 @@ class EmailNotificationRegistrar implements SplObserver
                 $form->slug,
                 $e->getMessage(),
             ));
+        }
+    }
+
+    /**
+     * Apply the resolved notification body to the message.
+     *
+     * If the body contains any HTML markup, build a multipart/alternative
+     * MIME message with both an HTML part and a stripped-tag plain-text
+     * fallback so non-HTML clients (and spam scanners) get a readable
+     * version. A pure plain-text body is set verbatim — no MIME wrapper.
+     */
+    private function applyBody(Message $message, string $body): void
+    {
+        if (! $this->looksLikeHtml($body)) {
+            $message->setBody($body);
+            return;
+        }
+
+        $textPart           = new MimePart($this->htmlToText($body));
+        $textPart->type     = Mime::TYPE_TEXT;
+        $textPart->charset  = 'utf-8';
+        $textPart->encoding = Mime::ENCODING_QUOTEDPRINTABLE;
+
+        $htmlPart           = new MimePart($body);
+        $htmlPart->type     = Mime::TYPE_HTML;
+        $htmlPart->charset  = 'utf-8';
+        $htmlPart->encoding = Mime::ENCODING_QUOTEDPRINTABLE;
+
+        $mime = new MimeMessage();
+        $mime->setParts([$textPart, $htmlPart]);
+
+        $message->setBody($mime);
+
+        $contentType = $message->getHeaders()->get('Content-Type');
+        if ($contentType !== false) {
+            $contentType->setType('multipart/alternative');
+        }
+    }
+
+    private function looksLikeHtml(string $body): bool
+    {
+        return preg_match('/<[a-z!\/][^>]*>/i', $body) === 1;
+    }
+
+    /**
+     * Reduce HTML to a plaintext fallback. Not a pixel-perfect rendering
+     * — just enough for the alternative part to read sensibly when an
+     * email client falls back to text/plain.
+     */
+    private function htmlToText(string $html): string
+    {
+        $text = (string) preg_replace('!<head\b[^>]*>.*?</head>!is', '', $html);
+        $text = (string) preg_replace('!<style\b[^>]*>.*?</style>!is', '', $text);
+        $text = (string) preg_replace('!<script\b[^>]*>.*?</script>!is', '', $text);
+        $text = (string) preg_replace('!<br\s*/?>!i', "\n", $text);
+        $text = (string) preg_replace('!</(p|div|h[1-6]|li|tr)>!i', "\n", $text);
+        $text = strip_tags($text);
+        $text = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
+        $text = (string) preg_replace('/[\t ]+/', ' ', $text);
+        $text = (string) preg_replace('/\n{3,}/', "\n\n", $text);
+        $text = trim($text);
+        return wordwrap($text, 78);
+    }
+
+    /**
+     * Resolve tokens on a single From / Reply-To address and hand the
+     * result to the caller's setter. Failures (invalid email after
+     * resolution, e.g. an admin who put name tokens in the from-
+     * address slot) are swallowed so one bad notification field
+     * cannot suppress every other notification on the same submission.
+     *
+     * @param array<string, mixed>             $values
+     * @param array<string, mixed>             $entry
+     * @param callable(string): Message        $apply
+     */
+    private function applyAddress(
+        ?string $raw,
+        FormDefinition $form,
+        array $values,
+        array $entry,
+        callable $apply,
+    ): void {
+        if ($raw === null || $raw === '') {
+            return;
+        }
+        $resolved = trim($this->tokens->replace($raw, $form, $values, $entry));
+        if ($resolved === '') {
+            return;
+        }
+        try {
+            $apply($resolved);
+        } catch (Throwable $e) {
+            // Resolved value isn't a valid address (e.g. unresolved tokens
+            // left intact, or a name string accidentally placed in the
+            // address slot). Skip rather than abort the whole notification.
         }
     }
 

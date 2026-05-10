@@ -65,9 +65,8 @@ class SubmitController extends AbstractActionController
         private LaminasDbFormLoader $loader,
         private FormSubmissionService $service,
         private FormStateStash $stash,
+        private TokenReplacer $tokens,
         private array $observers = [],
-        /** @var array<string, mixed> */
-        private array $siteContext = [],
     ) {
         foreach ($observers as $observer) {
             $service->attach($observer);
@@ -115,7 +114,6 @@ class SubmitController extends AbstractActionController
         }
 
         $success = $this->resolveSuccessSettings($form);
-        $tokens  = new TokenReplacer($this->siteContext);
         $entry   = $result->entryId !== null ? ['id' => $result->entryId] : [];
 
         if ($this->wantsJson()) {
@@ -124,10 +122,25 @@ class SubmitController extends AbstractActionController
                 $success['mode'] === FormDefinition::SUCCESS_REDIRECT_URL
                 && is_string($success['redirect_url']) && $success['redirect_url'] !== ''
             ) {
-                $payload['url'] = $tokens->replaceForUrl($success['redirect_url'], $form, $result->values, $entry);
+                $payload['url'] = $this->tokens->replaceForUrl(
+                    $success['redirect_url'],
+                    $form,
+                    $result->values,
+                    $entry,
+                );
             } elseif ($success['mode'] === FormDefinition::SUCCESS_INLINE_MESSAGE) {
-                $payload['title']   = $tokens->replace((string) $success['title'], $form, $result->values, $entry);
-                $payload['message'] = $tokens->replace((string) $success['message'], $form, $result->values, $entry);
+                $payload['title']   = $this->tokens->replace(
+                    (string) $success['title'],
+                    $form,
+                    $result->values,
+                    $entry,
+                );
+                $payload['message'] = $this->tokens->replace(
+                    (string) $success['message'],
+                    $form,
+                    $result->values,
+                    $entry,
+                );
             }
             return $this->respondJson($payload, 200);
         }
@@ -136,7 +149,12 @@ class SubmitController extends AbstractActionController
             $success['mode'] === FormDefinition::SUCCESS_REDIRECT_URL
             && is_string($success['redirect_url']) && $success['redirect_url'] !== ''
         ) {
-            $url = $tokens->replaceForUrl($success['redirect_url'], $form, $result->values, $entry);
+            $url = $this->tokens->replaceForUrl(
+                $success['redirect_url'],
+                $form,
+                $result->values,
+                $entry,
+            );
             return $this->redirect()->toUrl($url);
         }
 

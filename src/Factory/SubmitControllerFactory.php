@@ -13,6 +13,7 @@ use Contenir\FormBuilder\Laminas\Mvc\State\FormStateStash;
 use Contenir\FormBuilder\Registrar\WebhookRegistrar;
 use Contenir\FormBuilder\Service\FormBuilderService;
 use Contenir\FormBuilder\Service\FormSubmissionService;
+use Contenir\FormBuilder\Service\TokenReplacer;
 use Contenir\FormBuilder\Validator\ValidatorFactory;
 use Contenir\Storage\StorageManager;
 use Laminas\Mail\Transport\TransportInterface;
@@ -69,14 +70,12 @@ class SubmitControllerFactory
             }
         }
 
-        $siteContext = is_array($config['site_context'] ?? null) ? $config['site_context'] : [];
-
         return new SubmitController(
             $services->get(LaminasDbFormLoader::class),
             $service,
             $services->get(FormStateStash::class),
+            $services->get(TokenReplacer::class),
             $observers,
-            $siteContext,
         );
     }
 }

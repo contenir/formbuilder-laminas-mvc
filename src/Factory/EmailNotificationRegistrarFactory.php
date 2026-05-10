@@ -10,15 +10,10 @@ use Laminas\Mail\Transport\TransportInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Container\ContainerInterface;
 
-use function is_array;
-
 class EmailNotificationRegistrarFactory
 {
     public function __invoke(ContainerInterface $container): EmailNotificationRegistrar
     {
-        $config      = $container->get('config')['formbuilder'] ?? [];
-        $siteContext = is_array($config['site_context'] ?? null) ? $config['site_context'] : [];
-
         /** @var TransportInterface $transport */
         $transport = $container->get(TransportInterface::class);
 
@@ -31,7 +26,7 @@ class EmailNotificationRegistrarFactory
         }
 
         return new EmailNotificationRegistrar(
-            new TokenReplacer($siteContext),
+            $container->get(TokenReplacer::class),
             $transport,
             $logger,
         );
