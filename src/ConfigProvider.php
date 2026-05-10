@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace Contenir\FormBuilder\Laminas\Mvc;
 
 use Contenir\FormBuilder\Laminas\Mvc\Controller\SubmitController;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\EmailNotificationRegistrarFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\LaminasDbEntryRepositoryFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\LaminasDbFormLoaderFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\StoreSubmissionRegistrarFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Factory\SubmitControllerFactory;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\WebhookRegistrarFactory;
 use Contenir\FormBuilder\Laminas\Mvc\Loader\LaminasDbFormLoader;
+use Contenir\FormBuilder\Laminas\Mvc\Registrar\EmailNotificationRegistrar;
 use Contenir\FormBuilder\Laminas\Mvc\Registrar\StoreSubmissionRegistrar;
 use Contenir\FormBuilder\Laminas\Mvc\Repository\LaminasDbEntryRepository;
 use Contenir\FormBuilder\Laminas\Mvc\View\Helper\FormMarkup;
+use Contenir\FormBuilder\Registrar\WebhookRegistrar;
 
 /**
  * Returns the merged Laminas-MVC config consumed by Module::getConfig().
@@ -39,9 +43,11 @@ final class ConfigProvider
     {
         return [
             'factories' => [
-                LaminasDbFormLoader::class       => LaminasDbFormLoaderFactory::class,
-                LaminasDbEntryRepository::class  => LaminasDbEntryRepositoryFactory::class,
-                StoreSubmissionRegistrar::class  => StoreSubmissionRegistrarFactory::class,
+                LaminasDbFormLoader::class          => LaminasDbFormLoaderFactory::class,
+                LaminasDbEntryRepository::class     => LaminasDbEntryRepositoryFactory::class,
+                StoreSubmissionRegistrar::class     => StoreSubmissionRegistrarFactory::class,
+                EmailNotificationRegistrar::class   => EmailNotificationRegistrarFactory::class,
+                WebhookRegistrar::class             => WebhookRegistrarFactory::class,
             ],
         ];
     }

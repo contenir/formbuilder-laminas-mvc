@@ -7,11 +7,15 @@ namespace Contenir\FormBuilder\Laminas\Mvc\Factory;
 use Contenir\FormBuilder\FieldType\FieldTypeRegistry;
 use Contenir\FormBuilder\Laminas\Mvc\Controller\SubmitController;
 use Contenir\FormBuilder\Laminas\Mvc\Loader\LaminasDbFormLoader;
+use Contenir\FormBuilder\Laminas\Mvc\Registrar\EmailNotificationRegistrar;
 use Contenir\FormBuilder\Laminas\Mvc\Registrar\StoreSubmissionRegistrar;
+use Contenir\FormBuilder\Registrar\WebhookRegistrar;
 use Contenir\FormBuilder\Service\FormBuilderService;
 use Contenir\FormBuilder\Service\FormSubmissionService;
 use Contenir\FormBuilder\Validator\ValidatorFactory;
 use Contenir\Storage\StorageManager;
+use Laminas\Mail\Transport\TransportInterface;
+use Laminas\Mvc\Controller\ControllerManager;
 use Psr\Container\ContainerInterface;
 use SplObserver;
 
@@ -23,7 +27,7 @@ class SubmitControllerFactory
     public function __invoke(ContainerInterface $container): SubmitController
     {
         $config   = $container->get('config')['formbuilder'] ?? [];
-        $services = $container instanceof \Laminas\Mvc\Controller\ControllerManager
+        $services = $container instanceof ControllerManager
             ? $container->getServiceLocator()
             : $container;
 
@@ -40,7 +44,20 @@ class SubmitControllerFactory
             $storage,
         );
 
-        $observers = [$services->get(StoreSubmissionRegistrar::class)];
+        $observers = [
+            $services->get(StoreSubmissionRegistrar::class),
+            $services->get(WebhookRegistrar::class),
+        ];
+
+        // Email is conditional — wired only when the host has registered
+        // a Laminas\Mail TransportInterface. Sites without outbound mail
+        // simply don't get the registrar, no error.
+        if ($services->has(TransportInterface::class)) {
+            $observers[] = $services->get(EmailNotificationRegistrar::class);
+        }
+
+        // Extra observers from config — service-manager ids resolved at
+        // submit time, attached after the built-ins.
         foreach (is_array($config['observers'] ?? null) ? $config['observers'] : [] as $entry) {
             if (! is_string($entry) || ! $services->has($entry)) {
                 continue;
