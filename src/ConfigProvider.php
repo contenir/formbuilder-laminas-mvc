@@ -1,0 +1,122 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Contenir\FormBuilder\Laminas\Mvc;
+
+use Contenir\FormBuilder\Laminas\Mvc\Controller\SubmitController;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\LaminasDbEntryRepositoryFactory;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\LaminasDbFormLoaderFactory;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\StoreSubmissionRegistrarFactory;
+use Contenir\FormBuilder\Laminas\Mvc\Factory\SubmitControllerFactory;
+use Contenir\FormBuilder\Laminas\Mvc\Loader\LaminasDbFormLoader;
+use Contenir\FormBuilder\Laminas\Mvc\Registrar\StoreSubmissionRegistrar;
+use Contenir\FormBuilder\Laminas\Mvc\Repository\LaminasDbEntryRepository;
+use Contenir\FormBuilder\Laminas\Mvc\View\Helper\FormMarkup;
+
+/**
+ * Returns the merged Laminas-MVC config consumed by Module::getConfig().
+ *
+ * Kept separate so a future Mezzio adapter can require the same array
+ * without reaching into the MVC Module class.
+ */
+final class ConfigProvider
+{
+    /** @return array<string, mixed> */
+    public function __invoke(): array
+    {
+        return [
+            'service_manager' => $this->getDependencies(),
+            'controllers'     => $this->getControllers(),
+            'view_helpers'    => $this->getViewHelpers(),
+            'router'          => $this->getRouter(),
+            'formbuilder'     => $this->getDefaults(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function getDependencies(): array
+    {
+        return [
+            'factories' => [
+                LaminasDbFormLoader::class       => LaminasDbFormLoaderFactory::class,
+                LaminasDbEntryRepository::class  => LaminasDbEntryRepositoryFactory::class,
+                StoreSubmissionRegistrar::class  => StoreSubmissionRegistrarFactory::class,
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function getControllers(): array
+    {
+        return [
+            'factories' => [
+                SubmitController::class => SubmitControllerFactory::class,
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * Just `formMarkup` — a pure renderer that takes a FormDefinition
+     * and a built Laminas\Form. By design no view helper does its own
+     * data fetching: the controller owns loading the definition (via
+     * {@see LaminasDbFormLoader}) and building the form (via
+     * {@see \Contenir\FormBuilder\Service\FormBuilderService}), and
+     * passes both to the template. Confirmation rendering is the
+     * controller's call too — branch on `?form=ok` and choose what
+     * the template emits.
+     */
+    public function getViewHelpers(): array
+    {
+        return [
+            'invokables' => [
+                'formMarkup' => FormMarkup::class,
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function getRouter(): array
+    {
+        return [
+            'routes' => [
+                'forms-submit' => [
+                    'type'    => 'segment',
+                    'options' => [
+                        'route'    => '/forms/submit/:slug',
+                        'defaults' => [
+                            'controller' => SubmitController::class,
+                            'action'     => 'submit',
+                        ],
+                        'constraints' => [
+                            'slug' => '[a-z0-9][a-z0-9\-]*',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function getDefaults(): array
+    {
+        return [
+            // Service id of the Laminas\Db\Adapter\Adapter the loader and
+            // repository should consume. Defaults to the conventional
+            // 'Laminas\Db\Adapter\Adapter' service name; override in the
+            // consuming site's `formbuilder.global.php` if your DB adapter
+            // is registered under a different key.
+            'db_adapter' => 'Laminas\Db\Adapter\Adapter',
+            // Static values for {site:*} TokenReplacer expansion.
+            'site_context' => [],
+            // Factory list of additional submission observers. Each entry
+            // can be a service-manager id (string) — resolved at submit
+            // time and attached to FormSubmissionService alongside the
+            // built-in StoreSubmissionRegistrar. Sites add email /
+            // webhook / custom registrars here.
+            'observers' => [],
+        ];
+    }
+}
